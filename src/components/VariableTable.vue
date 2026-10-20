@@ -115,8 +115,12 @@
                 <!-- Secret Mode -->
                 <template v-if="item.is_secret">
                   <div class="secret-box">
-                    <span v-if="revealedSecrets[item.id] !== undefined" class="mono val-text">
-                      {{ revealedSecrets[item.id] }}
+                    <span
+                      v-if="revealedSecrets[item.id] !== undefined"
+                      class="mono val-text"
+                      :class="{ 'val-empty': !revealedSecrets[item.id] }"
+                    >
+                      {{ revealedSecrets[item.id] || '(钥匙串中无密文，请点击右侧编辑设置)' }}
                     </span>
                     <span v-else class="masked-dots">••••••••••••••••</span>
 
@@ -521,6 +525,12 @@ input:checked + .slider:before {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.val-empty {
+  color: var(--text-dim);
+  font-style: italic;
+  font-size: 11px;
 }
 
 .btn-reveal {

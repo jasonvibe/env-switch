@@ -32,3 +32,27 @@ pub fn delete_secret(profile_id: &str, var_key: &str) -> Result<(), String> {
         Err(e) => Err(e.to_string()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_keychain_save_get_delete() {
+        let p_id = "test_profile";
+        let k = "TEST_KEY";
+        let secret = "my_super_secret_12345";
+
+        let save_res = save_secret(p_id, k, secret);
+        println!("save_secret result: {:?}", save_res);
+        assert!(save_res.is_ok(), "save_secret failed: {:?}", save_res);
+
+        let retrieved = get_secret(p_id, k);
+        println!("get_secret result: {:?}", retrieved);
+        assert_eq!(retrieved.unwrap(), secret);
+
+        let del_res = delete_secret(p_id, k);
+        println!("delete_secret result: {:?}", del_res);
+        assert!(del_res.is_ok());
+    }
+}
