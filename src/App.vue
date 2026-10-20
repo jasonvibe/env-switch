@@ -1,160 +1,167 @@
-<script setup lang="ts">
-import { ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
-
-const greetMsg = ref("");
-const name = ref("");
-
-async function greet() {
-  // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-  greetMsg.value = await invoke("greet", { name: name.value });
-}
-</script>
-
 <template>
-  <main class="container">
-    <h1>Welcome to Tauri + Vue</h1>
-
-    <div class="row">
-      <a href="https://vite.dev" target="_blank">
-        <img src="/vite.svg" class="logo vite" alt="Vite logo" />
-      </a>
-      <a href="https://tauri.app" target="_blank">
-        <img src="/tauri.svg" class="logo tauri" alt="Tauri logo" />
-      </a>
-      <a href="https://vuejs.org/" target="_blank">
-        <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-      </a>
+  <div class="app-root">
+    <!-- Loading state -->
+    <div v-if="state.loading" class="loading-screen">
+      <div class="spinner"></div>
+      <span class="loading-text">加载 EnvSwitch 配置中...</span>
     </div>
-    <p>Click on the Tauri, Vite, and Vue logos to learn more.</p>
 
-    <form class="row" @submit.prevent="greet">
-      <input id="greet-input" v-model="name" placeholder="Enter a name..." />
-      <button type="submit">Greet</button>
-    </form>
-    <p>{{ greetMsg }}</p>
-  </main>
+    <!-- Main View -->
+    <div v-else class="app-layout">
+      <!-- Sidebar -->
+      <Sidebar
+        @open-add-project="showAddProjectModal = true"
+        @open-add-profile="handleOpenAddProfile"
+      />
+
+      <!-- Content Area -->
+      <main class="main-content">
+        <!-- Topbar -->
+        <Topbar
+          @open-import="showImportExportModal = true"
+          @open-export="showImportExportModal = true"
+          @open-add-var="handleOpenAddVar"
+        />
+
+        <!-- Variable Table -->
+        <VariableTable
+          @edit-var="handleEditVar"
+        />
+      </main>
+    </div>
+
+    <!-- Modals -->
+    <AddVariableModal
+      v-if="showAddVarModal"
+      :editing-var="editingVariable"
+      @close="handleCloseAddVar"
+    />
+
+    <ImportExportModal
+      v-if="showImportExportModal"
+      @close="showImportExportModal = false"
+    />
+
+    <AddProjectModal
+      v-if="showAddProjectModal"
+      @close="showAddProjectModal = false"
+    />
+
+    <AddProfileModal
+      v-if="showAddProfileModal"
+      :project-id="addProfileProjectId"
+      @close="showAddProfileModal = false"
+    />
+  </div>
 </template>
 
+<script setup lang="ts">
+import { ref, onMounted } from "vue";
+import { listen } from "@tauri-apps/api/event";
+import { useEnvStore } from "./store";
+import type { EnvVariable } from "./types";
+
+import Sidebar from "./components/Sidebar.vue";
+import Topbar from "./components/Topbar.vue";
+import VariableTable from "./components/VariableTable.vue";
+import AddVariableModal from "./components/AddVariableModal.vue";
+import ImportExportModal from "./components/ImportExportModal.vue";
+import AddProjectModal from "./components/AddProjectModal.vue";
+import AddProfileModal from "./components/AddProfileModal.vue";
+
+const { state, init, clearSystemEnv } = useEnvStore();
+
+const showAddVarModal = ref(false);
+const editingVariable = ref<EnvVariable | null>(null);
+
+const showImportExportModal = ref(false);
+const showAddProjectModal = ref(false);
+const showAddProfileModal = ref(false);
+const addProfileProjectId = ref("");
+
+function handleOpenAddVar() {
+  editingVariable.value = null;
+  showAddVarModal.value = true;
+}
+
+function handleEditVar(item: EnvVariable) {
+  editingVariable.value = item;
+  showAddVarModal.value = true;
+}
+
+function handleCloseAddVar() {
+  showAddVarModal.value = false;
+  editingVariable.value = null;
+}
+
+function handleOpenAddProfile(projId: string) {
+  addProfileProjectId.value = projId;
+  showAddProfileModal.value = true;
+}
+
+onMounted(async () => {
+  await init();
+
+  // Listen to tray events
+  try {
+    await listen("tray-clear-env", async () => {
+      await clearSystemEnv();
+    });
+  } catch (err) {
+    console.warn("Tray event listen not available in browser mode:", err);
+  }
+});
+</script>
+
 <style scoped>
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
+.app-root {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+  background-color: var(--bg-app);
 }
 
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #249b73);
-}
-
-</style>
-<style>
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-}
-
-.container {
-  margin: 0;
-  padding-top: 10vh;
+.loading-screen {
+  flex: 1;
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
-  text-align: center;
+  gap: 12px;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-.row {
+.loading-text {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.app-layout {
   display: flex;
-  justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--bg-app);
 }
-
-a:hover {
-  color: #535bf2;
-}
-
-h1 {
-  text-align: center;
-}
-
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
-}
-
-#greet-input {
-  margin-right: 5px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
-  }
-
-  a:hover {
-    color: #24c8db;
-  }
-
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
-  button:active {
-    background-color: #0f0f0f69;
-  }
-}
-
 </style>
