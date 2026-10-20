@@ -63,9 +63,41 @@ flowchart TD
 ## 🛠 技术栈 (Tech Stack)
 
 - **框架**：[Tauri 2.0](https://v2.tauri.app/)（超轻量桌面框架，打包仅 ~8MB，内存仅 ~30MB）
-- **核心逻辑**：Rust 2021（高性能、内存安全、macOS 原生 Keychain 与 launchd 绑定）
-- **前端界面**：Vue 3 + TypeScript + Vite + Tailwind CSS
-- **包管理器**：Bun / pnpm
+- **核心逻辑**：Rust（高性能、内存安全、macOS 原生 Keychain 与 launchctl 绑定）
+- **前端界面**：Vue 3 + TypeScript + Vite + Lucide Icons + 现代 macOS 深色磨砂玻璃样式
+- **包管理器**：Bun
+
+---
+
+## 💻 命令行 CLI 伴生工具与 AI Agent 接入 (CLI & AI Agent Integration)
+
+EnvSwitch 自带原生 CLI 命令行伴生工具（已内置于 `/Users/jason/.local/bin/env-switch`），为终端开发者与各类 AI Agent（Antigravity、Cursor、Claude Code、Codex）提供**零全局污染、带 Keychain 自动解密**的精准访问接口。
+
+### 1. 终端与 Agent 常用命令
+```bash
+# 查看所有工作区、项目与环境概览
+env-switch ls
+
+# 精确获取指定项目与环境中的变量值（若为 Keychain 密文，自动解密输出真实密码）
+env-switch get "演示项目" "Local" "grafana_tcl_url"
+env-switch get "演示项目" "Local" "grafana_tcl_password"
+
+# 子进程隔离运行：仅为指定脚本注入环境变量，不污染 macOS 全局 Session（多 Agent 并发互不干扰）
+env-switch exec "演示项目" "Local" -- python3 my_script.py
+
+# 将指定项目环境一键解密并导出为标准 .env 文本
+env-switch export "演示项目" "Local"
+
+# 将指定项目环境立即注入至 macOS launchctl 全局系统环境
+env-switch apply "演示项目" "Local"
+
+# 清除 macOS 系统中所有由 EnvSwitch 注入的变量
+env-switch clear
+```
+
+### 2. 告诉 AI Agent 读取凭证的最佳方式
+当有多个项目（如 TCL智慧建管、河狸云、自研工具）时，直接向 Agent 发送提示词即可：
+> *“帮我分析生产日志，所需配置请直接调用 `env-switch get '项目名' '环境名' <KEY>` 获取，包括：`grafana_tcl_url`、`grafana_tcl_username`、`grafana_tcl_password`。”*
 
 ---
 
@@ -73,10 +105,13 @@ flowchart TD
 
 ### Phase 1：MVP 核心可用版
 - [x] GitHub 仓库建立与 Tauri 2.0 + Vue 3 脚手架搭建
-- [ ] 本地 SQLite 数据模型（Workspace / Project / Profile / Variables）
-- [ ] macOS Keychain 原生密码存储集成
-- [ ] macOS 菜单栏 Tray 基础交互与 Profile 秒切
-- [ ] `launchctl setenv` 全局系统注入
+- [x] 结构化本地数据持久化模型（Workspace / Project / Profile / Variables）
+- [x] macOS Keychain 硬件级钥匙串加密存储与解密查看（基于 Apple security-framework）
+- [x] macOS 菜单栏 Tray 托盘常驻、快速唤起与环境状态指示
+- [x] `launchctl setenv` 与 `unsetenv` 差量系统注入与全局清理
+- [x] 原生防拦截确认弹窗与系统级 `pbcopy` 剪贴板引擎
+- [x] `.env` 文本智能导入、敏感词自动 Keychain 打标与完整解密导出
+- [x] 伴生 CLI 命令行工具（`env-switch`）实现多项目精准读取与隔离执行
 
 ### Phase 2：工程化与本地联动
 - [ ] 项目本地目录绑定与 `.env` / `.env.local` 导出与反向解析
@@ -84,7 +119,7 @@ flowchart TD
 - [ ] 终端 Shell Hook（进入目录自动提示/切换）
 
 ### Phase 3：AI Agent 赋能
-- [ ] 内置轻量 stdio / SSE 模式 MCP Server
+- [ ] 内置轻量 stdio / SSE 模式 MCP Server (Model Context Protocol)
 - [ ] Agent 凭证调取弹窗授权与安全审计日志
 - [ ] 变量引用与动态模板语法（如 `${DB_HOST}:${DB_PORT}`）
 
