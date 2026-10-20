@@ -3,6 +3,15 @@
 > **macOS 菜单栏极简环境变量与凭证管理中枢**
 > *A lightweight macOS menu-bar app to manage environment variables & secrets, bridging the gap between GUI apps, terminal shells, and AI Agents.*
 
+<img width="1064" height="641" alt="PixPin_2026-10-20_21-24-01" src="https://github.com/user-attachments/assets/867b6375-7e0f-4ba4-b164-6dfde16aa4e2" />
+
+<img width="1064" height="641" alt="PixPin_2026-10-20_21-24-27" src="https://github.com/user-attachments/assets/222d6883-9274-4f46-9c60-279b99db18c2" />
+
+<img width="1064" height="641" alt="PixPin_2026-10-20_21-24-37" src="https://github.com/user-attachments/assets/b2b910f0-c24a-412b-93d8-c0676801463f" />
+
+<img width="1064" height="641" alt="PixPin_2026-10-20_21-24-56" src="https://github.com/user-attachments/assets/2ad5a907-b9db-4241-9c10-40cdd43d4ae7" />
+
+
 ---
 
 ## 🌟 为什么需要 EnvSwitch？(Why EnvSwitch?)
