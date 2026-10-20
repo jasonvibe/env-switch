@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+"""
+EnvSwitch CLI - 终端与 AI Agent 环境变量命令行交互工具
+支持按项目与环境精准读取变量（含 macOS Keychain 密文）、一键导出与子进程免污染运行。
+"""
+
+import sys
+import os
+import json
+import subprocess
+from pathlib import Path
+
+STORE_PATH = Path.home() / "Library/Application Support/com.jasonvibe.envswitch/store.json"
+SERVICE_NAME = "com.jasonvibe.envswitch"
+
+def load_store():
+    if not STORE_PATH.exists():
+        return {"workspaces": [], "projects": [], "profiles": [], "variables": [], "active_profile_id": None, "injected_keys": []}
+    try:
+        return json.loads(STORE_PATH.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"Error reading store.json: {e}", file=sys.stderr)
+        return {}
+
+def save_store(data):
+    STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    STORE_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def get_keychain_secret(profile_id, key):
+    account = f"{profile_id}::{key}"
+    try:
+        res = subprocess.check_output(
+            ["security", "find-generic-password", "-s", SERVICE_NAME, "-a", account, "-w"],
+            stderr=subprocess.DEVNULL,
+            text=True
+        ).strip()
+        return res
+    except Exception:
+        return ""
+
+def set_keychain_secret(profile_id, key, secret):
+    account = f"{profile_id}::{key}"
+    # Delete first if exists
+    subprocess.run(["security", "delete-generic-password", "-s", SERVICE_NAME, "-a", account],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if secret:
+        subprocess.run(["security", "add-generic-password", "-s", SERVICE_NAME, "-a", account, "-w", secret, "-U"],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+def find_project(store, project_name):
+    for p in store.get("projects", []):
+        if p["name"].lower() == project_name.lower() or p["id"] == project_name:
+            return p
+    return None
+
+def find_profile(store, project_id, profile_name):
+    for p in store.get("profiles", []):
+        if p.get("project_id") == project_id:
+            if p["name"].lower() == profile_name.lower() or p["id"] == profile_name:
+                return p
+    return None
+
+def get_variable_value(var):
+    if var.get("is_secret"):
+        return get_keychain_secret(var["profile_id"], var["key"])
+    return var.get("value", "")
+
+def cmd_list(store):
+    print("EnvSwitch 项目与环境清单:")
+    workspaces = store.get("workspaces", [])
+    projects = store.get("projects", [])
+    profiles = store.get("profiles", [])
+    variables = store.get("variables", [])
+    active_profile_id = store.get("active_profile_id")
+
+    for ws in workspaces:
+        print(f"\n📁 工作区: {ws['name']}")
+        ws_projects = [p for p in projects if p.get("workspace_id") == ws["id"]]
+        if not ws_projects:
+            print("   (无项目)")
+        for proj in ws_projects:
+            print(f"  📦 项目: {proj['name']}")
+            proj_profiles = [p for p in profiles if p.get("project_id") == proj["id"]]
+            for prof in proj_profiles:
+                var_count = len([v for v in variables if v.get("profile_id") == prof["id"]])
+                is_active = prof["id"] == active_profile_id
+                active_flag = " [🟢 系统生效中]" if is_active else ""
+                print(f"     • {prof['name']} ({var_count} 变量){active_flag}")
+
+def cmd_get(store, args):
+    if not args:
+        print("Usage: env-switch get [project] [profile] <key>", file=sys.stderr)
+        sys.exit(1)
+
+    variables = store.get("variables", [])
+
+    if len(args) == 1:
+        # Search by key: first check active profile, else search all
+        key = args[0]
+        active_id = store.get("active_profile_id")
+        if active_id:
+            for v in variables:
+                if v.get("profile_id") == active_id and v["key"].upper() == key.upper():
+                    print(get_variable_value(v))
+                    return
+        # If not active or not found, search across all profiles
+        matches = [v for v in variables if v["key"].upper() == key.upper()]
+        if matches:
+            print(get_variable_value(matches[0]))
+            return
+        sys.exit(1)
+
+    elif len(args) >= 3:
+        project_name, profile_name, key = args[0], args[1], args[2]
+        proj = find_project(store, project_name)
+        if not proj:
+            print(f"Project '{project_name}' not found", file=sys.stderr)
+            sys.exit(1)
+        prof = find_profile(store, proj["id"], profile_name)
+        if not prof:
+            print(f"Profile '{profile_name}' not found in project '{project_name}'", file=sys.stderr)
+            sys.exit(1)
+
+        for v in variables:
+            if v.get("profile_id") == prof["id"] and v["key"].upper() == key.upper():
+                print(get_variable_value(v))
+                return
+        sys.exit(1)
+    else:
+        print("Usage: env-switch get <key> OR env-switch get <project> <profile> <key>", file=sys.stderr)
+        sys.exit(1)
+
+def cmd_export(store, args):
+    if len(args) < 2:
+        print("Usage: env-switch export <project> <profile>", file=sys.stderr)
+        sys.exit(1)
+    project_name, profile_name = args[0], args[1]
+    proj = find_project(store, project_name)
+    if not proj:
+        print(f"Project '{project_name}' not found", file=sys.stderr)
+        sys.exit(1)
+    prof = find_profile(store, proj["id"], profile_name)
+    if not prof:
+        print(f"Profile '{profile_name}' not found in project '{project_name}'", file=sys.stderr)
+        sys.exit(1)
+
+    variables = store.get("variables", [])
+    print(f"# Generated by EnvSwitch - Project: {proj['name']} | Profile: {prof['name']}")
+    for v in variables:
+        if v.get("profile_id") == prof["id"] and v.get("enabled", True):
+            val = get_variable_value(v)
+            if v.get("description"):
+                print(f"# {v['description']}")
+            print(f"{v['key']}={val}")
+
+def cmd_exec(store, args):
+    # env-switch exec <project> <profile> -- <command...>
+    if "--" not in args:
+        print("Usage: env-switch exec <project> <profile> -- <command...>", file=sys.stderr)
+        sys.exit(1)
+    idx = args.index("--")
+    prefix = args[:idx]
+    cmd = args[idx + 1:]
+
+    if len(prefix) < 2 or not cmd:
+        print("Usage: env-switch exec <project> <profile> -- <command...>", file=sys.stderr)
+        sys.exit(1)
+
+    project_name, profile_name = prefix[0], prefix[1]
+    proj = find_project(store, project_name)
+    if not proj:
+        print(f"Project '{project_name}' not found", file=sys.stderr)
+        sys.exit(1)
+    prof = find_profile(store, proj["id"], profile_name)
+    if not prof:
+        print(f"Profile '{profile_name}' not found in project '{project_name}'", file=sys.stderr)
+        sys.exit(1)
+
+    new_env = os.environ.copy()
+    variables = store.get("variables", [])
+    for v in variables:
+        if v.get("profile_id") == prof["id"] and v.get("enabled", True):
+            new_env[v["key"]] = get_variable_value(v)
+
+    # Replace current process
+    os.execvpe(cmd[0], cmd, new_env)
+
+def cmd_apply(store, args):
+    if len(args) < 2:
+        print("Usage: env-switch apply <project> <profile>", file=sys.stderr)
+        sys.exit(1)
+    project_name, profile_name = args[0], args[1]
+    proj = find_project(store, project_name)
+    if not proj:
+        print(f"Project '{project_name}' not found", file=sys.stderr)
+        sys.exit(1)
+    prof = find_profile(store, proj["id"], profile_name)
+    if not prof:
+        print(f"Profile '{profile_name}' not found in project '{project_name}'", file=sys.stderr)
+        sys.exit(1)
+
+    variables = store.get("variables", [])
+    old_injected = store.get("injected_keys", [])
+    new_injected = []
+
+    # Unset old keys not in new profile
+    enabled_vars = [v for v in variables if v.get("profile_id") == prof["id"] and v.get("enabled", True)]
+    new_keys = {v["key"] for v in enabled_vars}
+
+    for old_k in old_injected:
+        if old_k not in new_keys:
+            subprocess.run(["launchctl", "unsetenv", old_k], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    # Set new keys
+    for v in enabled_vars:
+        val = get_variable_value(v)
+        subprocess.run(["launchctl", "setenv", v["key"], val], check=True)
+        new_injected.append(v["key"])
+
+    # Update store
+    store["active_profile_id"] = prof["id"]
+    store["injected_keys"] = new_injected
+    for p in store.get("profiles", []):
+        if p.get("project_id") == proj["id"]:
+            p["is_active"] = (p["id"] == prof["id"])
+    save_store(store)
+    print(f"✅ 已将 [{proj['name']} > {prof['name']}] 注入至 macOS 系统环境 ({len(new_injected)} 个变量)")
+
+def cmd_clear(store):
+    injected = store.get("injected_keys", [])
+    for k in injected:
+        subprocess.run(["launchctl", "unsetenv", k], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    store["injected_keys"] = []
+    store["active_profile_id"] = None
+    for p in store.get("profiles", []):
+        p["is_active"] = False
+    save_store(store)
+    print("✅ 已从 macOS launchctl 中清除所有由 EnvSwitch 注入的环境变量")
+
+def main():
+    store = load_store()
+    args = sys.argv[1:]
+    if not args or args[0] in ("-h", "--help", "help"):
+        print("""EnvSwitch CLI 环境变量中枢助手
+
+命令选项:
+  env-switch list / ls                      查看所有项目与环境概览
+  env-switch get <key>                      获取当前生效环境中某个变量的值
+  env-switch get <project> <profile> <key>  精确获取指定项目与环境中的变量值（含解密）
+  env-switch export <project> <profile>     导出指定项目环境为标准 .env 格式
+  env-switch exec <project> <profile> -- <cmd> 使用指定项目环境的变量运行命令（不污染系统）
+  env-switch apply <project> <profile>      将指定项目环境立即注入至 macOS launchctl
+  env-switch clear                          清除系统所有注入的变量
+""")
+        return
+
+    cmd = args[0]
+    rest = args[1:]
+    if cmd in ("list", "ls"):
+        cmd_list(store)
+    elif cmd == "get":
+        cmd_get(store, rest)
+    elif cmd == "export":
+        cmd_export(store, rest)
+    elif cmd == "exec":
+        cmd_exec(store, rest)
+    elif cmd == "apply":
+        cmd_apply(store, rest)
+    elif cmd == "clear":
+        cmd_clear(store)
+    else:
+        print(f"Unknown command: {cmd}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
