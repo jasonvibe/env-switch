@@ -199,7 +199,11 @@ async function handleSwitchExport() {
 }
 
 async function handleCopyExport() {
-  await navigator.clipboard.writeText(exportText.value);
+  try {
+    await api.copyToClipboard(exportText.value);
+  } catch {
+    await navigator.clipboard.writeText(exportText.value);
+  }
   copiedExport.value = true;
   setTimeout(() => {
     copiedExport.value = false;

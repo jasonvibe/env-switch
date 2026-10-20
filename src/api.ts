@@ -33,4 +33,8 @@ export const api = {
   async exportProfileDotenv(profileId: string): Promise<string> {
     return await invoke<string>("export_profile_dotenv", { profileId });
   },
+
+  async copyToClipboard(text: string): Promise<void> {
+    return await invoke<void>("copy_to_clipboard", { text });
+  },
 };

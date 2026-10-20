@@ -276,24 +276,39 @@ async function copySecretVal(item: EnvVariable) {
     if (val === undefined) {
       val = await api.getSecretVal(item.profile_id, item.key);
     }
-    await copyText(val, "val_" + item.id);
+    await copyText(val || "", "val_" + item.id);
   } catch (e: any) {
-    alert("读取密文失败: " + e);
+    console.error("读取密文失败: " + e);
   }
 }
 
 async function copyText(text: string, id: string) {
   try {
-    await navigator.clipboard.writeText(text);
-    copiedId.value = id;
-    setTimeout(() => {
-      if (copiedId.value === id) {
-        copiedId.value = null;
-      }
-    }, 1500);
-  } catch (err) {
-    console.error("Copy failed", err);
+    // 1. 优先调用原生 Tauri 命令 (macOS pbcopy，彻底绕过 WebKit 权限与安全上下文限制)
+    await api.copyToClipboard(text);
+  } catch {
+    // 2. 降级到 navigator.clipboard
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // 3. 降级到 DOM textarea execCommand
+      const el = document.createElement("textarea");
+      el.value = text;
+      el.style.position = "fixed";
+      el.style.opacity = "0";
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+    }
   }
+
+  copiedId.value = id;
+  setTimeout(() => {
+    if (copiedId.value === id) {
+      copiedId.value = null;
+    }
+  }, 1500);
 }
 
 function handleDelete(item: EnvVariable) {

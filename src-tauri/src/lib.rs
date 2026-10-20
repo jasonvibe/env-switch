@@ -116,6 +116,29 @@ fn export_profile_dotenv(profile_id: String, state: State<'_, AppState>) -> Resu
     Ok(out)
 }
 
+#[tauri::command]
+fn copy_to_clipboard(text: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+
+        let mut child = Command::new("pbcopy")
+            .stdin(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to spawn pbcopy: {}", e))?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(text.as_bytes());
+        }
+
+        let _ = child.wait();
+        return Ok(());
+    }
+    #[allow(unreachable_code)]
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let initial_store = storage::load_store().unwrap_or_default();
@@ -139,7 +162,8 @@ pub fn run() {
             set_secret_val,
             get_secret_val,
             parse_env_text,
-            export_profile_dotenv
+            export_profile_dotenv,
+            copy_to_clipboard
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
