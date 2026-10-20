@@ -102,17 +102,29 @@
       <button
         class="btn btn-danger btn-sm w-full"
         v-if="state.data?.active_profile_id"
-        @click="handleClearSystemEnv"
+        @click="showClearConfirm = true"
         title="从 launchctl 清除所有由 EnvSwitch 注入的环境变量"
       >
         <Trash2 :size="12" />
         <span>清除系统注入变量</span>
       </button>
     </div>
+
+    <!-- Confirm Modal -->
+    <ConfirmModal
+      v-if="showClearConfirm"
+      title="清除系统注入变量"
+      message="确定要从 macOS 系统 (launchctl) 中清除当前注入的所有环境变量吗？已打开的终端和应用将恢复默认环境。"
+      confirm-text="确认清除"
+      :is-danger="true"
+      @confirm="doClearSystemEnv"
+      @cancel="showClearConfirm = false"
+    />
   </aside>
 </template>
 
 <script setup lang="ts">
+import { ref } from "vue";
 import {
   Terminal,
   FolderGit2,
@@ -122,6 +134,7 @@ import {
   Trash2,
 } from "lucide-vue-next";
 import { useEnvStore } from "../store";
+import ConfirmModal from "./ConfirmModal.vue";
 
 defineEmits<{
   (e: "open-add-project"): void;
@@ -138,13 +151,14 @@ const {
   clearSystemEnv,
 } = useEnvStore();
 
-async function handleClearSystemEnv() {
-  if (confirm("确定要从 macOS 系统 (launchctl) 中清除当前注入的所有环境变量吗？")) {
-    try {
-      await clearSystemEnv();
-    } catch (err: any) {
-      alert("清除失败: " + err);
-    }
+const showClearConfirm = ref(false);
+
+async function doClearSystemEnv() {
+  showClearConfirm.value = false;
+  try {
+    await clearSystemEnv();
+  } catch (err: any) {
+    console.error("清除环境变量失败:", err);
   }
 }
 </script>

@@ -84,5 +84,9 @@ pub fn clear_system_env(store: &mut StoreData) -> Result<(), String> {
         let _ = execute_launchctl_unset(key);
     }
     store.injected_keys.clear();
+    store.active_profile_id = None;
+    for p in &mut store.profiles {
+        p.is_active = false;
+    }
     Ok(())
 }

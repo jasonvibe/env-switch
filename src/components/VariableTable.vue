@@ -196,6 +196,17 @@
         </tbody>
       </table>
     </div>
+
+    <!-- Delete Confirm Modal -->
+    <ConfirmModal
+      v-if="deletingItem"
+      title="删除环境变量"
+      :message="`确定要删除环境变量 ${deletingItem.key} 吗？此操作无法撤销。`"
+      confirm-text="确认删除"
+      :is-danger="true"
+      @confirm="doDeleteVariable"
+      @cancel="deletingItem = null"
+    />
   </div>
 </template>
 
@@ -217,6 +228,7 @@ import {
 import { useEnvStore } from "../store";
 import { api } from "../api";
 import type { EnvVariable } from "../types";
+import ConfirmModal from "./ConfirmModal.vue";
 
 defineEmits<{
   (e: "edit-var", item: EnvVariable): void;
@@ -231,6 +243,7 @@ const {
 
 const revealedSecrets = ref<Record<string, string>>({});
 const copiedId = ref<string | null>(null);
+const deletingItem = ref<EnvVariable | null>(null);
 
 const allCurrentVars = computed(() => {
   if (!state.data || !state.selectedProfileId) return [];
@@ -279,10 +292,15 @@ async function copyText(text: string, id: string) {
   }
 }
 
-async function handleDelete(item: EnvVariable) {
-  if (confirm(`确定要删除变量 "${item.key}" 吗？`)) {
-    await deleteVariable(item.id);
-  }
+function handleDelete(item: EnvVariable) {
+  deletingItem.value = item;
+}
+
+async function doDeleteVariable() {
+  if (!deletingItem.value) return;
+  const id = deletingItem.value.id;
+  deletingItem.value = null;
+  await deleteVariable(id);
 }
 </script>
 
